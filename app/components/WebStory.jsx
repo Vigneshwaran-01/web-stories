@@ -1,49 +1,50 @@
 'use client';
 import { useEffect, useState } from 'react';
 
-const WebStory = () => {
+const WebStory = ({ slug }) => {
   const [story, setStory] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const fallbackImage = 'https://via.placeholder.com/720x1280/1a1a1a/ffffff?text=Image+Not+Available';
 
   useEffect(() => {
     const loadStory = async () => {
       try {
         setLoading(true);
-        // Fetch all stories first
-        const response = await fetch('http://localhost:8080/api/stories');
-        
+        const response = await fetch(`/api/stories/${slug}`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
+        const storyData = await response.json();
+        console.log(storyData);
         
-        const stories = await response.json();
-        // Get the first story from the list
-        if (stories && stories.length > 0) {
-          // Fetch the full story details using the first story's slug
-          const storyResponse = await fetch(`http://localhost:8080/api/stories/${stories[0].slug}`);
-          if (!storyResponse.ok) {
-            throw new Error(`HTTP error! status: ${storyResponse.status}`);
-          }
-          const storyData = await storyResponse.json();
-          console.log('Story data:', storyData);
-          setStory(storyData);
-        } else {
-          throw new Error('No stories found');
+        // Don't wrap the story data in an array
+        setStory({
+          author: storyData.author,
+          category: storyData.category,
+          created_at: new Date(storyData.created_at).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          }),
+          id: storyData.id,
+          thumbnail: storyData.thumbnail,
+          title: storyData.title,
+          pages: storyData.pages || []
+        });
+
+        // Load AMP scripts only once
+        if (!document.querySelector('script[src="https://cdn.ampproject.org/v0.js"]')) {
+          const script = document.createElement('script');
+          script.async = true;
+          script.src = 'https://cdn.ampproject.org/v0.js';
+          document.head.appendChild(script);
+
+          const ampStoryScript = document.createElement('script');
+          ampStoryScript.async = true;
+          ampStoryScript.custom_element = "amp-story";
+          ampStoryScript.src = 'https://cdn.ampproject.org/v0/amp-story-1.0.js';
+          document.head.appendChild(ampStoryScript);
         }
-
-        // Load AMP scripts
-        const script = document.createElement('script');
-        script.async = true;
-        script.src = 'https://cdn.ampproject.org/v0.js';
-        document.body.appendChild(script);
-
-        const ampStoryScript = document.createElement('script');
-        ampStoryScript.async = true;
-        ampStoryScript.custom_element = "amp-story";
-        ampStoryScript.src = 'https://cdn.ampproject.org/v0/amp-story-1.0.js';
-        document.body.appendChild(ampStoryScript);
       } catch (err) {
         console.error('Error loading story:', err);
         setError(err.message);
@@ -52,8 +53,10 @@ const WebStory = () => {
       }
     };
 
-    loadStory();
-  }, []);
+    if (slug) {
+      loadStory();
+    }
+  }, [slug]);
 
   if (loading) {
     return (
@@ -66,9 +69,7 @@ const WebStory = () => {
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-xl text-red-600">
-          Error loading story: {error}
-        </div>
+        <div className="text-xl text-red-600">Error: {error}</div>
       </div>
     );
   }
@@ -87,14 +88,14 @@ const WebStory = () => {
         standalone=""
         title={story.title}
         publisher="Your Publisher Name"
-        publisher-logo-src={story.thumbnail || fallbackImage}
-        poster-portrait-src={story.thumbnail || fallbackImage}
+        publisher-logo-src={story.thumbnail}
+        poster-portrait-src={story.thumbnail}
       >
         {/* Cover Page */}
         <amp-story-page id="cover">
           <amp-story-grid-layer template="fill">
             <amp-img
-              src={story.thumbnail || fallbackImage}
+              src={story.thumbnail}
               width="720"
               height="1280"
               layout="responsive"
@@ -113,28 +114,28 @@ const WebStory = () => {
         </amp-story-page>
 
         {/* Story Pages */}
-        {story.pages?.map((page, index) => (
+        {story.pages.map((page, index) => (
           <amp-story-page id={`page-${index + 1}`} key={index}>
             <amp-story-grid-layer template="fill">
-              {page.media_type === 'image' ? (
-                <amp-img
-                  src={page.media_url || fallbackImage}
-                  width="720"
-                  height="1280"
-                  layout="responsive"
-                  alt={page.title}
-                />
-              ) : (
+              {page.media_type === 'video' ? (
                 <amp-video
                   autoplay=""
                   loop=""
                   width="720"
                   height="1280"
-                  poster={story.thumbnail || fallbackImage}
+                  poster={story.thumbnail}
                   layout="responsive"
                 >
                   <source src={page.media_url} type="video/mp4" />
                 </amp-video>
+              ) : (
+                <amp-img
+                  src={page.media_url}
+                  width="720"
+                  height="1280"
+                  layout="responsive"
+                  alt={page.title}
+                />
               )}
             </amp-story-grid-layer>
             <amp-story-grid-layer template="vertical" class="bottom">
@@ -146,27 +147,6 @@ const WebStory = () => {
           </amp-story-page>
         ))}
       </amp-story>
-
-      {/* <style jsx global>{`
-        .webstory-container {
-          width: 100vw;
-          height: 100vh;
-          position: fixed;
-          top: 0;
-          left: 0;
-        }
-        amp-story {
-          background: #000;
-        }
-        amp-story-grid-layer.bottom {
-          align-content: end;
-          padding-bottom: 40px;
-          background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%);
-        }
-        amp-story-grid-layer.bottom > div {
-          width: 100%;
-        }
-      `}</style> */}
     </div>
   );
 };
